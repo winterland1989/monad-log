@@ -18,6 +18,11 @@ module Control.Monad.Log (
     , defaultJSONFormatterExt
     , Logger(..)
     , makeLogger
+    -- * re-export from fast-logger
+    , module System.Log.FastLogger.Date
+    , module System.Log.FastLogger.File
+    , LogStr(..)
+    , LogType(..)
     -- * 'MonadLog' class
     , MonadLog(..)
     , subNameSpace
@@ -36,6 +41,8 @@ module Control.Monad.Log (
     , warningE
     , errorE
     , criticalE
+    -- * re-export from text-show
+    , TextShow(..)
     -- extra helpers
     , LogLoc(..)
     , logLoc
@@ -63,6 +70,8 @@ import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
 
 import System.Log.FastLogger
+import System.Log.FastLogger.Date
+import System.Log.FastLogger.File
 import Prelude hiding (error)
 
 import Data.Text (Text)
@@ -140,9 +149,9 @@ data Logger = Logger {
     }
 
 -- | make a 'Logger' based on 'FastLogger'
-makeLogger :: (MonadIO m) => LogType -> Level -> [NameSpace] -> LogFormatter -> LogFormatterExt -> m Logger
-makeLogger typ fltr ns fmt fmtExt = liftIO $ do
-    tc <- newTimeCache simpleTimeFormat
+makeLogger :: (MonadIO m) => TimeFormat -> LogType -> Level -> [NameSpace] -> LogFormatter -> LogFormatterExt -> m Logger
+makeLogger tfmt typ fltr ns fmt fmtExt = liftIO $ do
+    tc <- newTimeCache tfmt
     (fl, cleanUp) <- newFastLogger typ
     return $ Logger fltr ns fmt fmtExt tc fl cleanUp
 
