@@ -6,25 +6,26 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Control.Monad.Log (
-    -- data types, defaults
+    -- * data types, defaults
       Level(..)
     , showTextLevel
     , NameSpace
     , LogFormatter
+    , LogFormatterExt
     , defaultFormatter
     , defaultFormatterExt
     , defaultJSONFormatter
     , defaultJSONFormatterExt
     , Logger(..)
     , makeLogger
-    -- 'MonadLog' class
+    -- * 'MonadLog' class
     , MonadLog(..)
     , subNameSpace
     , setFilterLevel
-    -- ReaderT based 'MonadLog'
+    -- * ReaderT based 'MonadLog'
     , runLogger
     , runLogger'
-    -- logging functions
+    -- * logging functions
     , debug
     , info
     , warning
@@ -35,6 +36,11 @@ module Control.Monad.Log (
     , warningE
     , errorE
     , criticalE
+    -- extra helpers
+    , LogLoc(..)
+    , logLoc
+    , LogThreadId(..)
+    , logThreadId
     ) where
 
 import Control.Monad (when)
@@ -42,7 +48,19 @@ import Control.Monad.Catch (MonadMask, finally)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import qualified Control.Exception.Lifted as Lifted
 import Control.Monad.IO.Class
+import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Cont as Cont
+import Control.Monad.Trans.Except
+import Control.Monad.Trans.Identity
+import Control.Monad.Trans.List
+import Control.Monad.Trans.Maybe
+import qualified Control.Monad.Trans.RWS.Lazy as LazyRWS (RWST, ask, local, reader)
+import qualified Control.Monad.Trans.RWS.Strict as StrictRWS (RWST, ask, local, reader)
+import Control.Monad.Trans.State.Lazy as Lazy
+import Control.Monad.Trans.State.Strict as Strict
+import Control.Monad.Trans.Writer.Lazy as Lazy
+import Control.Monad.Trans.Writer.Strict as Strict
 
 import System.Log.FastLogger
 import Prelude hiding (error)
@@ -110,6 +128,7 @@ defaultJSONFormatterExt lvl time ns ext msg = toLogStr . BB.toLazyByteString $
         <> "msg" .= msg
     ) <> "\n"
 
+-- | A logger type based on 'FastLogger'
 data Logger = Logger {
         filterLevel  :: Level                 -- ^ filter level, equal or above it will be logged.
     ,   nameSpace    :: [NameSpace]           -- ^ a list of 'Text' from root to children, see 'subNameSpace'.
@@ -120,6 +139,7 @@ data Logger = Logger {
     ,   cleanUp      :: IO ()                 -- clean up action(flushing/closing...).
     }
 
+-- | make a 'Logger' based on 'FastLogger'
 makeLogger :: (MonadIO m) => LogType -> Level -> [NameSpace] -> LogFormatter -> LogFormatterExt -> m Logger
 makeLogger typ fltr ns fmt fmtExt = liftIO $ do
     tc <- newTimeCache simpleTimeFormat
@@ -128,27 +148,78 @@ makeLogger typ fltr ns fmt fmtExt = liftIO $ do
 
 -----------------------------------------------------------------------------------------
 
+-- | provide an instance for 'MonadLog' to log within your monad stack.
+-- Check 'ReaderT' based example below.
 class (MonadIO m) => MonadLog m where
     askLogger :: m Logger
     localLogger :: (Logger -> Logger) -> m a -> m a
 
-subNameSpace :: (MonadLog m) => NameSpace -> m a -> m a
-subNameSpace ns = localLogger (\ logger -> logger{ nameSpace = nameSpace logger ++ [ns] })
+instance MonadLog m => MonadLog (ContT r m) where
+    askLogger   = lift askLogger
+    localLogger = Cont.liftLocal askLogger localLogger
 
-setFilterLevel :: (MonadLog m) => Level -> m a -> m a
-setFilterLevel level = localLogger (\ logger -> logger{ filterLevel = level})
+instance MonadLog m => MonadLog (ExceptT e m) where
+    askLogger   = lift askLogger
+    localLogger = mapExceptT . localLogger
+
+instance MonadLog m => MonadLog (IdentityT m) where
+    askLogger   = lift askLogger
+    localLogger = mapIdentityT . localLogger
+
+instance MonadLog m => MonadLog (ListT m) where
+    askLogger   = lift askLogger
+    localLogger = mapListT . localLogger
+
+instance MonadLog m => MonadLog (MaybeT m) where
+    askLogger   = lift askLogger
+    localLogger = mapMaybeT . localLogger
+
+instance MonadLog m => MonadLog (ReaderT r m) where
+    askLogger   = lift askLogger
+    localLogger = mapReaderT . localLogger
+
+instance MonadLog m => MonadLog (Lazy.StateT s m) where
+    askLogger   = lift askLogger
+    localLogger = Lazy.mapStateT . localLogger
+
+instance MonadLog m => MonadLog (Strict.StateT s m) where
+    askLogger   = lift askLogger
+    localLogger = Strict.mapStateT . localLogger
+
+instance (Monoid w, MonadLog m) => MonadLog (Lazy.WriterT w m) where
+    askLogger   = lift askLogger
+    localLogger = Lazy.mapWriterT . localLogger
+
+instance (Monoid w, MonadLog m) => MonadLog (Strict.WriterT w m) where
+    askLogger   = lift askLogger
+    localLogger = Strict.mapWriterT . localLogger
 
 -----------------------------------------------------------------------------------------
 
+-- | 'ReaderT' based 'MonadLog'
+--
+-- basically a 'MonadLog' must embed a environment which contains a 'Logger'.
 instance (MonadIO m) => MonadLog (ReaderT Logger m) where
     askLogger = ask
     localLogger = local
 
+-- | run 'ReaderT' based 'MonadLog'
 runLogger :: (MonadIO m, MonadMask m) => Logger -> ReaderT Logger m a -> m a
 runLogger logger m = finally (runReaderT m logger) (liftIO $ cleanUp logger)
 
+-- | run 'ReaderT' based 'MonadLog'
 runLogger' :: (MonadBaseControl IO m, MonadIO m) => Logger -> ReaderT Logger m a -> m a
 runLogger' logger m = Lifted.finally (runReaderT m logger) (liftIO $ cleanUp logger)
+
+-----------------------------------------------------------------------------------------
+
+-- | run 'MonadLog' within a sub 'NameSpace'
+subNameSpace :: (MonadLog m) => NameSpace -> m a -> m a
+subNameSpace ns = localLogger (\ logger -> logger{ nameSpace = nameSpace logger ++ [ns] })
+
+-- | run 'MonadLog' within a new 'FilterLevel'
+setFilterLevel :: (MonadLog m) => Level -> m a -> m a
+setFilterLevel level = localLogger (\ logger -> logger{ filterLevel = level})
 
 -----------------------------------------------------------------------------------------
 
@@ -198,6 +269,7 @@ criticalE = logExt CRITICAL
 
 -----------------------------------------------------------------------------------------
 
+-- | a wrapper around 'Loc'
 newtype LogLoc = LogLoc Loc deriving (Show, Eq, Ord)
 
 instance TextShow LogLoc where
@@ -223,6 +295,7 @@ liftLoc (Loc a b c (d1, d2) (e1, e2)) = [|(LogLoc . Loc)
 logLoc :: Q Exp
 logLoc = [| $(TH.location >>= liftLoc) |]
 
+-- | a wrapper around 'ThreadId'
 newtype LogThreadId = LogThreadId ThreadId deriving (Show, Eq, Ord)
 
 instance TextShow LogThreadId where
