@@ -1,59 +1,52 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Control.Monad.Log (
-    -- * data types, defaults
+    -- * parametrized 'Logger' type
       Level(..)
-    , showTextLevel
-    , NameSpace
-    , LogFormatter
-    , LogFormatterExt
-    , defaultFormatter
-    , defaultFormatterExt
-    , defaultJSONFormatter
-    , defaultJSONFormatterExt
     , Logger(..)
     , makeLogger
+    , makeDefaultLogger
+    , makeDefaultJSONLogger
     -- * re-export from fast-logger
-    , module System.Log.FastLogger.Date
-    , module System.Log.FastLogger.File
+    , module X
     , LogStr(..)
+    , toLogStr
     , LogType(..)
     -- * 'MonadLog' class
     , MonadLog(..)
-    , subNameSpace
-    , setFilterLevel
-    -- * ReaderT based 'MonadLog'
-    , runLogger
-    , runLogger'
-    -- * logging functions
+    , withFilterLevel
+    , withEnv
+    -- * LogT, a concrete monad transformaer
+    , LogT(..)
+    , runLogTSafe
+    , runLogTSafe'
+    -- * re-export from text-show
+    , module TextShow
+    -- logging functions
     , debug
     , info
     , warning
     , error
     , critical
-    , debugE
-    , infoE
-    , warningE
-    , errorE
-    , criticalE
-    -- * re-export from text-show
-    , TextShow(..)
-    -- extra helpers
-    , LogLoc(..)
-    , logLoc
-    , LogThreadId(..)
-    , logThreadId
+    , debug'
+    , info'
+    , warning'
+    , error'
+    , critical'
     ) where
 
-import Control.Monad (when)
+import Control.Monad (when, liftM, ap)
 import Control.Monad.Catch (MonadMask, finally)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import qualified Control.Exception.Lifted as Lifted
+
+import Control.Monad.Fix
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
@@ -70,9 +63,9 @@ import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
 
 import System.Log.FastLogger
-import System.Log.FastLogger.Date
-import System.Log.FastLogger.File
-import Prelude hiding (error)
+import System.Log.FastLogger.Date as X
+import System.Log.FastLogger.File as X
+import Prelude hiding (log, error)
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -85,236 +78,246 @@ import qualified Data.Aeson as JSON
 import Data.Aeson (ToJSON, toJSON, toEncoding, fromEncoding, (.=))
 import Data.Monoid ((<>))
 
-import Language.Haskell.TH.Syntax (Loc(..), Q, Exp)
-import qualified Language.Haskell.TH.Syntax as TH
-import Control.Concurrent (ThreadId, myThreadId)
-
 -----------------------------------------------------------------------------------------
 
-data Level
-    = DEBUG                   -- ^ Debug messages
-    | INFO                    -- ^ Information
-    | WARNING                 -- ^ General Warnings
-    | ERROR                   -- ^ General Errors
-    | CRITICAL                -- ^ Severe situations
-  deriving (Eq, Ord, Show, Read)
+-- | a newtype wrapper arounded 'Int' for GHC unpacking, with following 'TextShow' instance:
+--
+-- > showb (Level 0) = "DEBUG"
+-- > showb (Level 1) = "INFO"
+-- > showb (Level 2) = "WARNING"
+-- > showb (Level 3) = "ERROR"
+-- > showb (Level 4) = "CRITICAL"
+-- > showb (Level x) = "OTHER:" <> showb x
+newtype Level = Level Int deriving (Eq, Ord, Bounded, Show, Read)
 
-showTextLevel :: Level -> Text
-showTextLevel DEBUG        = "DEBUG"
-showTextLevel INFO         = "INFO"
-showTextLevel WARNING      = "WARNING"
-showTextLevel ERROR        = "ERROR"
-showTextLevel CRITICAL     = "CRITICAL"
+instance TextShow Level where
+    showb (Level 0) = "DEBUG"
+    showb (Level 1) = "INFO"
+    showb (Level 2) = "WARNING"
+    showb (Level 3) = "ERROR"
+    showb (Level 4) = "CRITICAL"
+    showb (Level x) = "OTHER:" <> showb x
+    {-# inline showb #-}
 
-type NameSpace = Text
-type LogFormatter = Level -> FormattedTime -> [NameSpace] -> Text -> LogStr
-type LogFormatterExt = forall a. (TextShow a, ToJSON a) => Level -> FormattedTime -> [NameSpace] -> a -> Text -> LogStr
+lDEBUG :: Level
+lDEBUG = Level 0
 
-defaultFormatter :: LogFormatter
-defaultFormatter lvl time ns msg = toLogStr . T.concat $
-    [ "[" , showTextLevel lvl, "] [", T.decodeUtf8 time, T.intercalate ">>" ns, "] ", msg , "\n" ]
+lINFO :: Level
+lINFO = Level 1
 
-defaultFormatterExt :: LogFormatterExt
-defaultFormatterExt lvl time ns ext msg = toLogStr . T.concat $
-    [ "[" , showTextLevel lvl, "] [", T.decodeUtf8 time, T.intercalate ">>" ns, "] [", showt ext, "] " , msg , "\n" ]
+lWARNING :: Level
+lWARNING = Level 2
 
-defaultJSONFormatter :: LogFormatter
-defaultJSONFormatter lvl time ns msg = toLogStr . BB.toLazyByteString $
-    ( fromEncoding . JSON.pairs $
-        "level" .= showTextLevel lvl
-        <> "time" .=  T.decodeUtf8 time
-        <> "ns" .= ns
-        <> "msg" .= msg
-    ) <> "\n"
+lERROR :: Level
+lERROR = Level 3
 
-defaultJSONFormatterExt :: LogFormatterExt
-defaultJSONFormatterExt lvl time ns ext msg = toLogStr . BB.toLazyByteString $
-    ( JSON.fromEncoding . JSON.pairs $
-        "level" .= showTextLevel lvl
-        <> "time" .=  T.decodeUtf8 time
-        <> "ns" .= ns
-        <> "ext" .= ext
-        <> "msg" .= msg
-    ) <> "\n"
+lCRITICAL :: Level
+lCRITICAL = Level 4
 
--- | A logger type based on 'FastLogger'
-data Logger = Logger {
-        filterLevel  :: Level                 -- ^ filter level, equal or above it will be logged.
-    ,   nameSpace    :: [NameSpace]           -- ^ a list of 'Text' from root to children, see 'subNameSpace'.
-    ,   formatter    :: LogFormatter          -- a 'LogFormatter' function.
-    ,   formatterExt :: LogFormatterExt       -- a 'LogFormatterExt' function.
-    ,   timeCache    :: IO FormattedTime      -- a time cache to avoid cost of frequently formatting time.
-    ,   writer       :: FastLogger            -- the log function.
-    ,   cleanUp      :: IO ()                 -- clean up action(flushing/closing...).
+-- | A logger type parametrized by an extra environment type
+--
+-- the 'logger' type is based on 'FastLogger'
+data Logger env = Logger {
+        filterLevel  :: {-# UNPACK #-} !Level  -- ^ filter level, equal or above it will be logged.
+    ,   environment  :: env                    -- ^ parametrized logging environment.
+    ,   formatter    :: Level -> FormattedTime -> env -> Text -> LogStr -- ^ formatter function.
+    ,   timeCache    :: IO FormattedTime       -- a time cache to avoid cost of frequently formatting time.
+    ,   logger       :: LogStr -> IO ()        -- a 'FastLogger' log function.
+    ,   cleanUp      :: IO ()                  -- clean up action(flushing/closing file...).
     }
 
 -- | make a 'Logger' based on 'FastLogger'
-makeLogger :: (MonadIO m) => TimeFormat -> LogType -> Level -> [NameSpace] -> LogFormatter -> LogFormatterExt -> m Logger
-makeLogger tfmt typ fltr ns fmt fmtExt = liftIO $ do
+makeLogger :: (MonadIO m)
+    => (Level -> FormattedTime -> env -> Text -> LogStr)
+    -> TimeFormat
+    -> LogType
+    -> Level
+    -> env
+    -> m (Logger env)
+makeLogger fmt tfmt typ fltr env = liftIO $ do
     tc <- newTimeCache tfmt
     (fl, cleanUp) <- newFastLogger typ
-    return $ Logger fltr ns fmt fmtExt tc fl cleanUp
+    return $ Logger fltr env fmt tc fl cleanUp
+
+makeDefaultLogger :: (MonadIO m, TextShow env)
+    => TimeFormat
+    -> LogType
+    -> Level
+    -> env
+    -> m (Logger env)
+makeDefaultLogger = makeLogger defaultFormatter
+
+makeDefaultJSONLogger :: (MonadIO m, ToJSON env)
+    => TimeFormat
+    -> LogType
+    -> Level
+    -> env
+    -> m (Logger env)
+makeDefaultJSONLogger = makeLogger defaultJSONFormatter
+
+defaultFormatter :: (TextShow env) => Level -> FormattedTime -> env -> Text -> LogStr
+defaultFormatter lvl time env msg = toLogStr . T.concat $
+    [ "[" , showt lvl, "] ", T.decodeUtf8 time, " ",  showt env, " " , msg , "\n" ]
+
+defaultJSONFormatter :: (ToJSON env) => Level -> FormattedTime -> env -> Text -> LogStr
+defaultJSONFormatter lvl time env msg = toLogStr . BB.toLazyByteString $
+    ( fromEncoding . JSON.pairs $
+        "level" .= showt lvl
+        <> "time" .=  T.decodeUtf8 time
+        <> "env" .= env
+        <> "msg" .= msg
+    ) <> "\n"
 
 -----------------------------------------------------------------------------------------
 
 -- | provide an instance for 'MonadLog' to log within your monad stack.
--- Check 'ReaderT' based example below.
-class (MonadIO m) => MonadLog m where
-    askLogger :: m Logger
-    localLogger :: (Logger -> Logger) -> m a -> m a
+class (MonadIO m) => MonadLog env m | m -> env where
+    askLogger :: m (Logger env)
+    localLogger :: (Logger env -> Logger env) -> m a -> m a
 
-instance MonadLog m => MonadLog (ContT r m) where
+instance MonadLog env m => MonadLog env (ContT r m) where
     askLogger   = lift askLogger
     localLogger = Cont.liftLocal askLogger localLogger
 
-instance MonadLog m => MonadLog (ExceptT e m) where
+instance MonadLog env m => MonadLog env (ExceptT e m) where
     askLogger   = lift askLogger
     localLogger = mapExceptT . localLogger
 
-instance MonadLog m => MonadLog (IdentityT m) where
+instance MonadLog env m => MonadLog env (IdentityT m) where
     askLogger   = lift askLogger
     localLogger = mapIdentityT . localLogger
 
-instance MonadLog m => MonadLog (ListT m) where
+instance MonadLog env m => MonadLog env (ListT m) where
     askLogger   = lift askLogger
     localLogger = mapListT . localLogger
 
-instance MonadLog m => MonadLog (MaybeT m) where
+instance MonadLog env m => MonadLog env (MaybeT m) where
     askLogger   = lift askLogger
     localLogger = mapMaybeT . localLogger
 
-instance MonadLog m => MonadLog (ReaderT r m) where
+instance MonadLog env m => MonadLog env (ReaderT r m) where
     askLogger   = lift askLogger
     localLogger = mapReaderT . localLogger
 
-instance MonadLog m => MonadLog (Lazy.StateT s m) where
+instance MonadLog env m => MonadLog env (Lazy.StateT s m) where
     askLogger   = lift askLogger
     localLogger = Lazy.mapStateT . localLogger
 
-instance MonadLog m => MonadLog (Strict.StateT s m) where
+instance MonadLog env m => MonadLog env (Strict.StateT s m) where
     askLogger   = lift askLogger
     localLogger = Strict.mapStateT . localLogger
 
-instance (Monoid w, MonadLog m) => MonadLog (Lazy.WriterT w m) where
+instance (Monoid w, MonadLog env m) => MonadLog env (Lazy.WriterT w m) where
     askLogger   = lift askLogger
     localLogger = Lazy.mapWriterT . localLogger
 
-instance (Monoid w, MonadLog m) => MonadLog (Strict.WriterT w m) where
+instance (Monoid w, MonadLog env m) => MonadLog env (Strict.WriterT w m) where
     askLogger   = lift askLogger
     localLogger = Strict.mapWriterT . localLogger
 
 -----------------------------------------------------------------------------------------
 
--- | 'ReaderT' based 'MonadLog'
+-- | A simple 'MonadLog' instance.
 --
--- basically a 'MonadLog' must embed a environment which contains a 'Logger'.
-instance (MonadIO m) => MonadLog (ReaderT Logger m) where
-    askLogger = ask
-    localLogger = local
+-- a reader monad which embed a 'Logger'.
+newtype LogT env m a = LogT { runLogT :: Logger env -> m a }
+
+instance Monad m => Functor (LogT env m) where
+    fmap = liftM
+    {-# INLINE fmap #-}
+
+instance Monad m => Applicative (LogT env m) where
+    pure = return
+    {-# INLINE pure #-}
+    (<*>) = ap
+    {-# INLINE (<*>) #-}
+
+instance Monad m => Monad (LogT env m) where
+    return = LogT . const . return
+    {-# INLINE return #-}
+    LogT ma >>= f = LogT $ \logger -> do
+        a <- ma logger
+        let LogT f' = f a
+        f' logger
+    {-# INLINE (>>=) #-}
+
+instance (MonadFix m) => MonadFix (LogT r m) where
+    mfix f = LogT $ \ r -> mfix $ \ a -> runLogT (f a) r
+    {-# INLINE mfix #-}
+
+instance MonadTrans (LogT env) where
+    lift = LogT . const
+    {-# INLINE lift #-}
+
+instance MonadIO m => MonadIO (LogT env m) where
+    liftIO = lift . liftIO
+    {-# INLINE liftIO #-}
+
+instance MonadIO m => MonadLog env (LogT env m) where
+    askLogger = LogT return
+    {-# INLINE askLogger #-}
+    localLogger f ma = LogT $ \ r -> runLogT ma (f r)
+    {-# INLINE localLogger #-}
 
 -- | run 'ReaderT' based 'MonadLog'
-runLogger :: (MonadIO m, MonadMask m) => Logger -> ReaderT Logger m a -> m a
-runLogger logger m = finally (runReaderT m logger) (liftIO $ cleanUp logger)
+runLogTSafe :: (MonadIO m, MonadMask m) => Logger env -> LogT env m a -> m a
+runLogTSafe logger m = finally (runLogT m logger) (liftIO $ cleanUp logger)
 
 -- | run 'ReaderT' based 'MonadLog'
-runLogger' :: (MonadBaseControl IO m, MonadIO m) => Logger -> ReaderT Logger m a -> m a
-runLogger' logger m = Lifted.finally (runReaderT m logger) (liftIO $ cleanUp logger)
+runLogTSafe' :: (MonadBaseControl IO m, MonadIO m) => Logger env -> LogT env m a -> m a
+runLogTSafe' logger m = Lifted.finally (runLogT m logger) (liftIO $ cleanUp logger)
 
 -----------------------------------------------------------------------------------------
-
--- | run 'MonadLog' within a sub 'NameSpace'
-subNameSpace :: (MonadLog m) => NameSpace -> m a -> m a
-subNameSpace ns = localLogger (\ logger -> logger{ nameSpace = nameSpace logger ++ [ns] })
 
 -- | run 'MonadLog' within a new 'FilterLevel'
-setFilterLevel :: (MonadLog m) => Level -> m a -> m a
-setFilterLevel level = localLogger (\ logger -> logger{ filterLevel = level})
+withFilterLevel :: (MonadLog env m) => Level -> m a -> m a
+withFilterLevel level = localLogger (\ logger -> logger{ filterLevel = level})
+
+withEnv :: (MonadLog env m) => env -> m a -> m a
+withEnv env = localLogger (\ logger -> logger{ environment = env })
 
 -----------------------------------------------------------------------------------------
 
-log' :: (MonadLog m) => Level -> Text -> m ()
-log' fltr msg = do
-    (Logger lvl ns fmt _ tc wrt _) <- askLogger
-    when (lvl <= fltr) $
-        liftIO $ tc >>= \ t -> (wrt . toLogStr) (fmt lvl t ns msg)
+log :: (MonadLog env m) => Level -> Text -> m ()
+log lvl msg = do
+    (Logger fltr env fmt tc wrt _) <- askLogger
+    when (lvl >= fltr) $ liftIO $
+        tc >>= \ t -> (wrt . toLogStr) (fmt lvl t env msg)
+{-# INLINE log #-}
+
+log' :: (MonadLog env m) => Level -> env -> Text -> m ()
+log' lvl env msg = do
+    (Logger fltr _ fmt tc wrt _) <- askLogger
+    when (lvl >= fltr) $ liftIO $
+        tc >>= \ t -> (wrt . toLogStr) (fmt lvl t env msg)
 {-# INLINE log' #-}
 
-logExt :: (TextShow a, ToJSON a, MonadLog m) => Level -> a -> Text -> m ()
-logExt fltr ext msg = do
-    (Logger lvl ns fmt fmtExt tc wrt _) <- askLogger
-    when (lvl <= fltr) $
-        liftIO $ tc >>= \ t -> (wrt . toLogStr) (fmtExt lvl t ns ext msg)
-{-# INLINE logExt #-}
+debug :: (MonadLog env m) => Text -> m ()
+debug = log lDEBUG
 
-debug :: (MonadLog m) => Text -> m ()
-debug = log' DEBUG
+info :: (MonadLog env m) => Text -> m ()
+info = log lINFO
 
-info :: (MonadLog m) => Text -> m ()
-info = log' INFO
+warning :: (MonadLog env m) => Text -> m ()
+warning = log lWARNING
 
-warning :: (MonadLog m) => Text -> m ()
-warning = log' WARNING
+error :: (MonadLog env m) => Text -> m ()
+error = log lERROR
 
-error :: (MonadLog m) => Text -> m ()
-error = log' ERROR
+critical :: (MonadLog env m) => Text -> m ()
+critical = log lCRITICAL
 
-critical :: (MonadLog m) => Text -> m ()
-critical = log' CRITICAL
+debug' :: (MonadLog env m) => env -> Text -> m ()
+debug' = log' lDEBUG
 
-debugE :: (TextShow a, ToJSON a, MonadLog m) => a -> Text -> m ()
-debugE = logExt DEBUG
+info' :: (MonadLog env m) => env -> Text -> m ()
+info' = log' lINFO
 
-infoE :: (TextShow a, ToJSON a, MonadLog m) => a -> Text -> m ()
-infoE = logExt INFO
+warning' :: (MonadLog env m) => env -> Text -> m ()
+warning' = log' lWARNING
 
-warningE :: (TextShow a, ToJSON a, MonadLog m) => a -> Text -> m ()
-warningE = logExt WARNING
+error' :: (MonadLog env m) => env -> Text -> m ()
+error' = log' lERROR
 
-errorE :: (TextShow a, ToJSON a, MonadLog m) => a -> Text -> m ()
-errorE = logExt ERROR
-
-criticalE :: (TextShow a, ToJSON a, MonadLog m) => a -> Text -> m ()
-criticalE = logExt CRITICAL
-
------------------------------------------------------------------------------------------
-
--- | a wrapper around 'Loc'
-newtype LogLoc = LogLoc Loc deriving (Show, Eq, Ord)
-
-instance TextShow LogLoc where
-    showb (LogLoc (Loc file _ _ start end)) = showb file <> showb start <> showb end
-
-instance ToJSON LogLoc where
-    toJSON (LogLoc (Loc file _ _ start end)) =
-        JSON.object ["filename" .= file, "start" .= start, "end" .= end]
-    toEncoding (LogLoc (Loc file _ _ start end)) =
-        JSON.pairs ("filename" .= file <> "start" .= start <> "end" .= end)
-
--- | Lift a location into an Exp.
-liftLoc :: Loc -> Q Exp
-liftLoc (Loc a b c (d1, d2) (e1, e2)) = [|(LogLoc . Loc)
-    $(TH.lift a)
-    $(TH.lift b)
-    $(TH.lift c)
-    ($(TH.lift d1), $(TH.lift d2))
-    ($(TH.lift e1), $(TH.lift e2))
-    |]
-
--- | Get current 'LogLoc'.
-logLoc :: Q Exp
-logLoc = [| $(TH.location >>= liftLoc) |]
-
--- | a wrapper around 'ThreadId'
-newtype LogThreadId = LogThreadId ThreadId deriving (Show, Eq, Ord)
-
-instance TextShow LogThreadId where
-    showb (LogThreadId tid) = (showb . show) tid
-
-instance ToJSON LogThreadId where
-    toJSON = toJSON . show
-    toEncoding = toEncoding . show
-
-logThreadId :: (MonadIO m) => m LogThreadId
-logThreadId = fmap LogThreadId (liftIO myThreadId)
-
------------------------------------------------------------------------------------------
+critical' :: (MonadLog env m) => env -> Text -> m ()
+critical' = log' lCRITICAL
