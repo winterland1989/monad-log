@@ -65,6 +65,7 @@ module Control.Monad.Log (
     , module X
     ) where
 
+import Control.Applicative
 import Control.Monad (when, liftM, ap)
 import Control.Monad.Catch (MonadMask, finally)
 import Control.Monad.Trans.Control (MonadBaseControl)
