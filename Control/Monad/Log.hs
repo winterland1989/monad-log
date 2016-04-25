@@ -98,7 +98,7 @@ import TextShow as X
 
 import qualified Data.Aeson as JSON
 import Data.Aeson (ToJSON, fromEncoding, (.=))
-import Data.Monoid ((<>))
+import Data.Monoid (Monoid, (<>))
 
 -----------------------------------------------------------------------------------------
 
