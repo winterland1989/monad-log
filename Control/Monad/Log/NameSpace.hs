@@ -4,10 +4,10 @@
 module Control.Monad.Log.NameSpace where
 
 import Control.Monad.Log
+import Control.Applicative
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Functor ((<$>))
 
 -- | A newtype around a list of names from children to root.
 --

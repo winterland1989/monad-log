@@ -4,9 +4,9 @@
 module Control.Monad.Log.Label where
 
 import Control.Monad.Log
+import Control.Applicative
 import Data.Aeson
 import Data.Text (Text)
-import Data.Functor ((<$>))
 
 -- | Simple 'Label' environment for labelled logging.
 --

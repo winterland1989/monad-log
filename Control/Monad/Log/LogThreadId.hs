@@ -4,12 +4,12 @@
 module Control.Monad.Log.LogThreadId where
 
 import Control.Monad.Log
+import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Concurrent
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Functor ((<$>))
 
 -- | a formatted 'LogThreadId'.
 --

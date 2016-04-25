@@ -157,11 +157,11 @@ envLens f (Logger fltr e fmt t l c) = fmap (\ e' -> Logger fltr e' fmt t l c) (f
 
 -- | make a 'Logger' based on 'FastLogger'.
 makeLogger :: (MonadIO m)
-    => (Level -> FormattedTime -> env -> Text -> LogStr)
-    -> TimeFormat
+    => (Level -> FormattedTime -> env -> Text -> LogStr)  -- ^ formatter function
+    -> TimeFormat                                         -- ^ check "System.Log.FastLogger.Date"
     -> LogType
-    -> Level
-    -> env
+    -> Level                                              -- ^ filter level
+    -> env                                                -- ^ init environment
     -> m (Logger env)
 makeLogger fmt tfmt typ fltr env = liftIO $ do
     tc <- newTimeCache tfmt

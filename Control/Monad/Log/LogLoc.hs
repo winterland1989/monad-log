@@ -6,11 +6,11 @@
 module Control.Monad.Log.LogLoc where
 
 import Control.Monad.Log
+import Control.Applicative
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Aeson
 import Data.Monoid ((<>))
-import Data.Functor ((<$>))
 
 import Language.Haskell.TH.Syntax (Q, Exp)
 import qualified Language.Haskell.TH.Syntax as TH
