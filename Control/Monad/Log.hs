@@ -176,14 +176,14 @@ makeDefaultJSONLogger = makeLogger defaultJSONFormatter
 
 -- | a default formatter with following format:
 --
--- [LEVEL] [TIME] [ENV] LOG MESSAGE\n
+-- @[LEVEL] [TIME] [ENV] LOG MESSAGE\\n@
 defaultFormatter :: (TextShow env) => Level -> FormattedTime -> env -> Text -> LogStr
 defaultFormatter lvl time env msg = toLogStr . T.concat $
     [ "[" , showt lvl, "] [", T.decodeUtf8 time,  "] [",  showt env, "] " , msg , "\n" ]
 
 -- | a default JSON formatter with following format:
 --
--- {"level": LEVEL, "time": TIME, "env": ENV, msg: LOG MESSAGE }\n
+-- @{"level": LEVEL, "time": TIME, "env": ENV, msg: LOG MESSAGE }\\n@
 defaultJSONFormatter :: (ToJSON env) => Level -> FormattedTime -> env -> Text -> LogStr
 defaultJSONFormatter lvl time env msg = toLogStr . BB.toLazyByteString $
     ( fromEncoding . JSON.pairs $
