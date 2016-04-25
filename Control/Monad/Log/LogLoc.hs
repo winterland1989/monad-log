@@ -61,6 +61,11 @@ liftLogLoc (TH.Loc f p m (l, _) _) = [|LogLoc
     |]
 
 -- | Get current 'LogLoc'.
+--
+--  depending on how accurately you want to record source location,
+--  you may want to use 'Logger' 's environment, or provide your own on every log.
+--
+--  example usage: @info' $myLogLoc "log message"@
 myLogLoc :: Q Exp
 myLogLoc = [| $(TH.location >>= liftLogLoc) |]
 
