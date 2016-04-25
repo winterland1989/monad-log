@@ -43,7 +43,7 @@ module Control.Monad.Log (
     , runLogTSafe
     , runLogTSafeBase
     , runLogT'
-    -- logging functions
+    -- * logging functions
     , debug
     , info
     , warning
@@ -202,7 +202,7 @@ defaultFormatter lvl time env msg = toLogStr . T.concat $
 
 -- | a default JSON formatter with following format:
 --
--- @{"level": LEVEL, "time": TIME, "env": ENV, msg: LOG MESSAGE }\\n@
+-- @{"level": "LEVEL", "time": "TIME", "env": "ENV", "msg": "LOG MESSAGE" }\\n@
 defaultJSONFormatter :: (ToJSON env) => Level -> FormattedTime -> env -> Text -> LogStr
 defaultJSONFormatter lvl time env msg = toLogStr . BB.toLazyByteString $
     ( fromEncoding . JSON.pairs $
@@ -216,8 +216,7 @@ defaultJSONFormatter lvl time env msg = toLogStr . BB.toLazyByteString $
 
 -- | This is the main class for using logging function in this package.
 --
--- provide an instance for 'MonadLog' to log within your monad stack
--- a concrete transformmer 'LogT' is also provided.
+-- provide an instance for 'MonadLog' to log within your monad stack.
 class (MonadIO m) => MonadLog env m | m -> env where
     askLogger :: m (Logger env)
     localLogger :: (Logger env -> Logger env) -> m a -> m a
@@ -286,7 +285,7 @@ localEnv f = localLogger $ \ lgr -> lgr { environment = f (environment lgr) }
 
 -- | A simple 'MonadLog' instance.
 --
--- a reader monad which embed a 'Logger'.
+-- a special reader monad which embed a 'Logger'.
 newtype LogT env m a = LogT { runLogT :: Logger env -> m a }
 
 instance Monad m => Functor (LogT env m) where
@@ -312,7 +311,7 @@ instance Monad m => Monad (LogT env m) where
 
 #if MIN_VERSION_base(4,9,0)
 instance Fail.MonadFail m => Fail.MonadFail (LogT env m) where
-    fail msg = lift (Fail.fail) msg
+    fail msg = lift (Fail.fail msg)
     {-# INLINE fail #-}
 #endif
 
