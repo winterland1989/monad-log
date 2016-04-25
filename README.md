@@ -1,5 +1,7 @@
-Monad who can log
-=================
+A fast & simple logging monad
+=============================
+
+[![Hackage](https://img.shields.io/hackage/v/monad-log.svg?style=flat-square)](http://hackage.haskell.org/package/monad-log)
 
 This package provide a mtl style `MonadLog` class and a concrete monad transformer `LogT`, the main difference between this package and monad-logger are:
 
