@@ -2,11 +2,14 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 module Control.Monad.Log.LogLoc where
 
 import Control.Monad.Log
+#if !(MIN_VERSION_base(4,8,0))
 import Control.Applicative
+#endif
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Aeson
@@ -35,8 +38,10 @@ instance TextShow LogLoc where
 instance ToJSON LogLoc where
     toJSON (LogLoc p m f l) =
         object ["filename" .= f, "module" .= m, "package" .= p, "line" .= l]
+#if MIN_VERSION_aeson(0,10,0)
     toEncoding (LogLoc p m f l) =
         pairs ("filename" .= f <> "module" .= m <> "package" .= p <> "line" .= l)
+#endif
 
 instance FromJSON LogLoc where
     parseJSON (Object v) = LogLoc <$>

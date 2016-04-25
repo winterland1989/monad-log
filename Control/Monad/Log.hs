@@ -5,6 +5,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE CPP #-}
 
 -- | This module provides a mtl style 'MonadLog' class and a concrete monad transformer 'LogT'.
 --
@@ -65,7 +66,13 @@ module Control.Monad.Log (
     , module X
     ) where
 
+#if !(MIN_VERSION_base(4,8,0))
 import Control.Applicative
+import Data.Monoid (Monoid)
+#endif
+#if MIN_VERSION_base(4,9,0)
+import qualified Control.Monad.Fail as Failed
+#endif
 import Control.Monad (when, liftM, ap)
 import Control.Monad.Catch (MonadMask, finally)
 import Control.Monad.Trans.Control (MonadBaseControl)
@@ -98,7 +105,7 @@ import TextShow as X
 
 import qualified Data.Aeson as JSON
 import Data.Aeson (ToJSON, fromEncoding, (.=))
-import Data.Monoid (Monoid, (<>))
+import Data.Monoid ((<>))
 
 -----------------------------------------------------------------------------------------
 
@@ -300,6 +307,14 @@ instance Monad m => Monad (LogT env m) where
         let LogT f' = f a
         f' lgr
     {-# INLINE (>>=) #-}
+    fail msg = lift (fail msg)
+    {-# INLINE fail #-}
+
+#if MIN_VERSION_base(4,9,0)
+instance Fail.MonadFail m => Fail.MonadFail (LogT env m) where
+    fail msg = lift (Fail.fail) msg
+    {-# INLINE fail #-}
+#endif
 
 instance (MonadFix m) => MonadFix (LogT r m) where
     mfix f = LogT $ \ r -> mfix $ \ a -> runLogT (f a) r

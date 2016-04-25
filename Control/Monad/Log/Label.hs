@@ -1,10 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 module Control.Monad.Log.Label where
 
 import Control.Monad.Log
+#if !(MIN_VERSION_base(4,8,0))
 import Control.Applicative
+#endif
 import Data.Aeson
 import Data.Text (Text)
 
@@ -21,7 +24,9 @@ instance TextShow Label where
 
 instance ToJSON Label where
     toJSON (Label t) = toJSON t
+#if MIN_VERSION_aeson(0,10,0)
     toEncoding (Label t) = toEncoding t
+#endif
 
 instance FromJSON Label where
     parseJSON t = Label <$> parseJSON t

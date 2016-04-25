@@ -50,7 +50,7 @@ library
                     ,   text
                     ,   text-show
                     ,   transformers >=0.2
-                    ,   aeson        >= 0.10 && <0.12
+                    ,   aeson        >= 0.4 && <0.12
                     ,   template-haskell 
 
   -- hs-source-dirs:      

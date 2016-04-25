@@ -1,10 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 
 module Control.Monad.Log.LogThreadId where
 
 import Control.Monad.Log
+#if !(MIN_VERSION_base(4,8,0))
 import Control.Applicative
+#endif
 import Control.Monad.IO.Class
 import Control.Concurrent
 import Data.Aeson
@@ -24,7 +27,9 @@ instance TextShow LogThreadId where
 
 instance ToJSON LogThreadId where
     toJSON (LogThreadId t) = toJSON t
+#if MIN_VERSION_aeson(0,10,0)
     toEncoding (LogThreadId t) = toEncoding t
+#endif
 
 instance FromJSON LogThreadId where
     parseJSON t = LogThreadId <$> parseJSON t
