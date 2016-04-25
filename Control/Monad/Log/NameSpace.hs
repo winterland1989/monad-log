@@ -7,6 +7,7 @@ import Control.Monad.Log
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Functor ((<$>))
 
 -- | A newtype around a list of names from children to root.
 --
