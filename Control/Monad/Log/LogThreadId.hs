@@ -9,7 +9,6 @@ import Control.Concurrent
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Internal.Builder (fromText)
 
 -- | a formatted 'LogThreadId'.
 --

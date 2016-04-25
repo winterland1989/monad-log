@@ -6,6 +6,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE RankNTypes #-}
 
+-- | This module provides a mtl style 'MonadLog' class and a concrete monad transformer 'LogT'.
+--
+-- If you are an application author, you can use 'LogT' transformer,
+-- a specialized reader monad to inject 'Logger'.
+--
+-- If you are a library author, you should:
+--
+--     * make your monad stack an instance of 'MonadLog', usually you can do this by embedding a 'Logger' into your monad's reader part.
+--
+--     * provide a default formatter, and API to run with customized formatter.
+--
 module Control.Monad.Log (
     -- * parametrized 'Logger' type
       Level(..)
@@ -21,23 +32,16 @@ module Control.Monad.Log (
     , makeDefaultJSONLogger
     , defaultFormatter
     , defaultJSONFormatter
-    -- * re-export from fast-logger
-    , module X
-    , LogStr
-    , toLogStr
-    , LogType(..)
     -- * 'MonadLog' class
     , MonadLog(..)
-    , localEnv
     , withFilterLevel
     , withEnv
+    , localEnv
     -- * LogT, a concrete monad transformaer
     , LogT(..)
     , runLogTSafe
     , runLogTSafeBase
     , runLogT'
-    -- * re-export from text-show
-    , module TextShow
     -- logging functions
     , debug
     , info
@@ -49,6 +53,16 @@ module Control.Monad.Log (
     , warning'
     , error'
     , critical'
+    -- * re-export from text-show and fast-logger
+    , LogStr
+    , toLogStr
+    , LogType(..)
+    , FileLogSpec(..)
+    , TimeFormat
+    , FormattedTime
+    , simpleTimeFormat
+    , simpleTimeFormat'
+    , module X
     ) where
 
 import Control.Monad (when, liftM, ap)
@@ -73,15 +87,13 @@ import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
 
 import System.Log.FastLogger
-import System.Log.FastLogger.Date as X
-import System.Log.FastLogger.File as X
 import Prelude hiding (log, error)
 
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Builder as BB
-import TextShow (TextShow, showt, showb)
+import TextShow as X
 
 import qualified Data.Aeson as JSON
 import Data.Aeson (ToJSON, fromEncoding, (.=))

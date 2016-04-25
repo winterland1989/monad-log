@@ -6,7 +6,6 @@ module Control.Monad.Log.Label where
 import Control.Monad.Log
 import Data.Aeson
 import Data.Text (Text)
-import Data.Text.Internal.Builder (fromText)
 
 -- | Simple 'Label' environment for labelled logging.
 --

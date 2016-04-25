@@ -15,9 +15,9 @@ This package provide a mtl style `MonadLog` class and a concrete monad transform
 
 + default to fast-logger backend, with good stdout and file support.
 
-If you are an application author, you can use `LogT` transformer, it's just a specialized reader monad to inject `Logger env`.
+If you are an application author, you can use `LogT` transformer, a specialized reader monad to inject `Logger env`.
 
-If you are a library author, you should do following two things:
+If you are a library author, you should:
 
 + make your monad stack an instance of 'MonadLog', usually you can do this by embedding `Logger env` into your monad's reader part.
 

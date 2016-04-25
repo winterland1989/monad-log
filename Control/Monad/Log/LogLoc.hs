@@ -8,7 +8,6 @@ module Control.Monad.Log.LogLoc where
 import Control.Monad.Log
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Internal.Builder (fromText)
 import Data.Aeson
 import Data.Monoid ((<>))
 
