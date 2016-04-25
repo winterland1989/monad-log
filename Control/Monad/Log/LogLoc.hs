@@ -9,7 +9,6 @@ import Control.Monad.Log
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Internal.Builder (fromText)
-import qualified Control.Concurrent as Conc
 import Data.Aeson
 import Data.Monoid ((<>))
 
@@ -45,6 +44,7 @@ instance FromJSON LogLoc where
         v .: "module" <*>
         v .: "filename" <*>
         v .: "line"
+    parseJSON _ = fail "LogLoc should be an object"
 
 -- | Lift a location into an Exp.
 liftLogLoc :: TH.Loc -> Q Exp

@@ -23,7 +23,7 @@ module Control.Monad.Log (
     , defaultJSONFormatter
     -- * re-export from fast-logger
     , module X
-    , LogStr(..)
+    , LogStr
     , toLogStr
     , LogType(..)
     -- * 'MonadLog' class
@@ -65,8 +65,8 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.Identity
 import Control.Monad.Trans.List
 import Control.Monad.Trans.Maybe
-import qualified Control.Monad.Trans.RWS.Lazy as LazyRWS (RWST, ask, local, reader)
-import qualified Control.Monad.Trans.RWS.Strict as StrictRWS (RWST, ask, local, reader)
+import qualified Control.Monad.Trans.RWS.Lazy as LazyRWS (RWST, mapRWST)
+import qualified Control.Monad.Trans.RWS.Strict as StrictRWS (RWST, mapRWST)
 import Control.Monad.Trans.State.Lazy as Lazy
 import Control.Monad.Trans.State.Strict as Strict
 import Control.Monad.Trans.Writer.Lazy as Lazy
@@ -80,12 +80,11 @@ import Prelude hiding (log, error)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as BB
 import TextShow (TextShow, showt, showb)
 
 import qualified Data.Aeson as JSON
-import Data.Aeson (ToJSON, toJSON, toEncoding, fromEncoding, (.=))
+import Data.Aeson (ToJSON, fromEncoding, (.=))
 import Data.Monoid ((<>))
 
 -----------------------------------------------------------------------------------------
@@ -153,8 +152,8 @@ makeLogger :: (MonadIO m)
     -> m (Logger env)
 makeLogger fmt tfmt typ fltr env = liftIO $ do
     tc <- newTimeCache tfmt
-    (fl, cleanUp) <- newFastLogger typ
-    return $ Logger fltr env fmt tc fl cleanUp
+    (fl, cl) <- newFastLogger typ
+    return $ Logger fltr env fmt tc fl cl
 
 -- | make a 'Logger' with 'defaultFormatter'.
 makeDefaultLogger :: (MonadIO m, TextShow env)
@@ -243,17 +242,25 @@ instance (Monoid w, MonadLog env m) => MonadLog env (Strict.WriterT w m) where
     askLogger   = lift askLogger
     localLogger = Strict.mapWriterT . localLogger
 
+instance (MonadLog env m, Monoid w) => MonadLog env (LazyRWS.RWST r w s m) where
+    askLogger   = lift askLogger
+    localLogger = LazyRWS.mapRWST . localLogger
+
+instance (MonadLog env m, Monoid w) => MonadLog env (StrictRWS.RWST r w s m) where
+    askLogger   = lift askLogger
+    localLogger = StrictRWS.mapRWST . localLogger
+
 -- | run 'MonadLog' within a new 'FilterLevel'.
 withFilterLevel :: (MonadLog env m) => Level -> m a -> m a
-withFilterLevel level = localLogger (\ logger -> logger{ filterLevel = level})
+withFilterLevel level = localLogger (\ lgr -> lgr{ filterLevel = level})
 
 -- | run 'MonadLog' within a new environment.
 withEnv :: (MonadLog env m) => env -> m a -> m a
-withEnv env = localLogger (\ logger -> logger{ environment = env })
+withEnv env = localLogger (\ lgr -> lgr{ environment = env })
 
 -- | run 'MonadLog' within a modified environment.
 localEnv :: (MonadLog env m) => (env -> env) -> m a -> m a
-localEnv f = localLogger $ \ logger -> logger { environment = f (environment logger) }
+localEnv f = localLogger $ \ lgr -> lgr { environment = f (environment lgr) }
 
 -----------------------------------------------------------------------------------------
 
@@ -275,10 +282,10 @@ instance Monad m => Applicative (LogT env m) where
 instance Monad m => Monad (LogT env m) where
     return = LogT . const . return
     {-# INLINE return #-}
-    LogT ma >>= f = LogT $ \logger -> do
-        a <- ma logger
+    LogT ma >>= f = LogT $ \lgr -> do
+        a <- ma lgr
         let LogT f' = f a
-        f' logger
+        f' lgr
     {-# INLINE (>>=) #-}
 
 instance (MonadFix m) => MonadFix (LogT r m) where
@@ -301,11 +308,11 @@ instance MonadIO m => MonadLog env (LogT env m) where
 
 -- | safely run 'LogT' inside 'MonadMask'. Logs are guaranteed to be flushed on exceptions.
 runLogTSafe :: (MonadIO m, MonadMask m) => Logger env -> LogT env m a -> m a
-runLogTSafe logger m = finally (runLogT m logger) (liftIO $ cleanUp logger)
+runLogTSafe lgr m = finally (runLogT m lgr) (liftIO $ cleanUp lgr)
 
 -- | safely run 'LogT' inside 'MonadBaseControl IO m'. Logs are guaranteed to be flushed on exceptions.
 runLogTSafeBase :: (MonadBaseControl IO m, MonadIO m) => Logger env -> LogT env m a -> m a
-runLogTSafeBase logger m = Lifted.finally (runLogT m logger) (liftIO $ cleanUp logger)
+runLogTSafeBase lgr m = Lifted.finally (runLogT m lgr) (liftIO $ cleanUp lgr)
 
 -- | @runLogT' = flip runLogT@, run 'LogT' without clean up.
 -- usually used inside different threads so that an exception won't clean up 'Logger'.
