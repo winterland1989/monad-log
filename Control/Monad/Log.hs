@@ -71,7 +71,7 @@ import Control.Applicative
 import Data.Monoid (Monoid)
 #endif
 #if MIN_VERSION_base(4,9,0)
-import qualified Control.Monad.Fail as Failed
+import qualified Control.Monad.Fail as Fail
 #endif
 import Control.Monad (when, liftM, ap)
 import Control.Monad.Catch (MonadMask, finally)
