@@ -1,5 +1,5 @@
 name:                monad-log
-version:             0.1.1.0
+version:             0.1.2.0
 synopsis:            A simple and fast logging monad
 description:         
     This package provide a mtl style `MonadLog` class and a concrete monad transformer `LogT`, the main difference between this package and monad-logger are:

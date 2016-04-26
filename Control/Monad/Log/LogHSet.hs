@@ -74,7 +74,7 @@ import Data.Typeable
 import Data.Typeable.Compat
 #endif
 
--- | an heterogeneous environment for statically typed customized logging.
+-- | a heterogeneous environment for statically typed logging.
 --
 -- @
 -- showt (LogHSet (HSCons a (HSCons b HSNil))) -> "a, b"
