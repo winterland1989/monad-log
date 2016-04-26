@@ -35,10 +35,13 @@ cabal-version:       >=1.10
 library
   ghc-options:          -Wall
   exposed-modules:      Control.Monad.Log
+                    ,   Control.Monad.Log.Empty
+                    ,   Control.Monad.Log.LogHSet
                     ,   Control.Monad.Log.Label
                     ,   Control.Monad.Log.LogLoc
                     ,   Control.Monad.Log.NameSpace
                     ,   Control.Monad.Log.LogThreadId
+                    ,   Control.Monad.Log.LogParser
   -- other-modules:       
   -- other-extensions:    
   build-depends:        base >=4.6 && <5
@@ -51,7 +54,12 @@ library
                     ,   text-show
                     ,   transformers >=0.2
                     ,   aeson        >= 0.4 && <0.12
-                    ,   template-haskell 
+                    ,   hset         >= 2.0
+                    ,   type-fun
+                    ,   types-compat
+                    ,   unordered-containers
+                    ,   template-haskell
+
 
   -- hs-source-dirs:      
   default-language:    Haskell2010

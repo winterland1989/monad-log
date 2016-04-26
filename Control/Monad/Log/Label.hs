@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Control.Monad.Log.Label where
 
@@ -10,14 +11,15 @@ import Control.Applicative
 #endif
 import Data.Aeson
 import Data.Text (Text)
+import Data.Typeable
 
 -- | Simple 'Label' environment for labelled logging.
 --
 -- @
--- showt (Label "foo") = "foo"
--- toJSON (Label "foo") = "foo"
+-- showt (Label "foo") -> "foo"
+-- toJSON (Label "foo") -> "foo"
 -- @
-data Label = Label Text deriving (Show, Eq, Ord)
+data Label = Label Text deriving (Show, Eq, Ord, Typeable)
 
 instance TextShow Label where
     showb (Label t) = fromText t

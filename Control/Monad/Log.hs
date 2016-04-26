@@ -63,7 +63,7 @@ module Control.Monad.Log (
     , FormattedTime
     , simpleTimeFormat
     , simpleTimeFormat'
-    , module X
+    , module TextShow
     ) where
 
 #if !(MIN_VERSION_base(4,8,0))
@@ -101,10 +101,10 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.ByteString.Builder as BB
-import TextShow as X
+import TextShow
 
 import qualified Data.Aeson as JSON
-import Data.Aeson (ToJSON, fromEncoding, (.=))
+import Data.Aeson (ToJSON(..), FromJSON(..), fromEncoding, (.=))
 import Data.Monoid ((<>))
 
 -----------------------------------------------------------------------------------------
@@ -127,6 +127,24 @@ instance TextShow Level where
     showb (Level 4) = "CRITICAL"
     showb (Level x) = "OTHER:" <> showb x
     {-# inline showb #-}
+
+instance ToJSON Level where
+    toJSON l = toJSON (showt l)
+#if MIN_VERSION_aeson(0,10,0)
+    toEncoding l = toEncoding (showt l)
+#endif
+
+instance FromJSON Level where
+    parseJSON (JSON.String str) = case str of
+        "DEBUG"    -> return levelDebug
+        "INFO"     -> return levelInfo
+        "WARNING"  -> return levelWarning
+        "ERROR"    -> return levelError
+        "CRITICAL" -> return levelCritical
+        _          -> case T.stripPrefix "OTHER:" str of
+            Just str' -> Level <$> parseJSON (JSON.String str')
+            Nothing   -> fail "wrong level format"
+    parseJSON _  = fail "wrong level format"
 
 -- | Alias for @Level 0@
 levelDebug :: Level
@@ -202,7 +220,7 @@ defaultFormatter lvl time env msg = toLogStr . T.concat $
 
 -- | a default JSON formatter with following format:
 --
--- @{"level": "LEVEL", "time": "TIME", "env": "ENV", "msg": "LOG MESSAGE" }\\n@
+-- @{"level": \"LEVEL\", "time": \"TIME\", "env": \"ENV\", "msg": \"LOG MESSAGE\" }\\n@
 defaultJSONFormatter :: (ToJSON env) => Level -> FormattedTime -> env -> Text -> LogStr
 defaultJSONFormatter lvl time env msg = toLogStr . BB.toLazyByteString $
     ( fromEncoding . JSON.pairs $
@@ -391,3 +409,4 @@ error' = log' levelError
 
 critical' :: (MonadLog env m) => env -> Text -> m ()
 critical' = log' levelCritical
+

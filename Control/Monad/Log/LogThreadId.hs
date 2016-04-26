@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Control.Monad.Log.LogThreadId where
 
@@ -13,14 +14,15 @@ import Control.Concurrent
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Typeable
 
 -- | a formatted 'LogThreadId'.
 --
 -- @
--- showt (LogThreadId "LogThreadId x") = "LogThreadId x"
--- toJSON (LogThreadId "LogThreadId x") = "LogThreadId x"
+-- showt (LogThreadId "LogThreadId x") -> "LogThreadId x"
+-- toJSON (LogThreadId "LogThreadId x") -> "LogThreadId x"
 -- @
-newtype LogThreadId = LogThreadId Text deriving (Show, Eq, Ord)
+newtype LogThreadId = LogThreadId Text deriving (Show, Eq, Ord, Typeable)
 
 instance TextShow LogThreadId where
     showb (LogThreadId t) = fromText t

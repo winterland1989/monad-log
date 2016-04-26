@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Control.Monad.Log.LogLoc where
 
@@ -17,12 +18,13 @@ import Data.Monoid ((<>))
 
 import Language.Haskell.TH.Syntax (Q, Exp)
 import qualified Language.Haskell.TH.Syntax as TH
+import Data.Typeable
 
 -- | source location information.
 --
 -- @
--- showt (LogLoc "package" "Module" "file.hs" 122) = "package Module file.hs 122"
--- toJSON (LogLoc "package" "Module" "file.hs" 122) =
+-- showt (LogLoc "package" "Module" "file.hs" 122) -> "package Module file.hs 122"
+-- toJSON (LogLoc "package" "Module" "file.hs" 122) ->
 --     '{"package":"package","module":"module","filename":"file.hs","line":122}'
 -- @
 data LogLoc = LogLoc {
@@ -30,7 +32,7 @@ data LogLoc = LogLoc {
     ,   module'  :: Text
     ,   filename :: Text
     ,   line     :: Int
-    } deriving (Show, Eq, Ord)
+    } deriving (Show, Eq, Ord, Typeable)
 
 instance TextShow LogLoc where
     showb (LogLoc p m f l) = fromText (T.intercalate " " [p, m, f, showt l])

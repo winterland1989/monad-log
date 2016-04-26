@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Control.Monad.Log.NameSpace where
 
@@ -11,16 +12,17 @@ import Control.Applicative
 import Data.Aeson
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Typeable
 
 -- | A newtype around a list of names from children to root.
 --
 -- This reversed order is choosen becasue '(:)' is faster.
 --
 -- @
--- showt (NameSpace ["subSub", "sub", "root"]) = "subSub<<sub<<root"
--- toJSON (NameSpace ["subSub", "sub", "root"]) = '["subSub", "sub", "root"]'
+-- showt (NameSpace ["subSub", "sub", "root"]) -> "subSub<<sub<<root"
+-- toJSON (NameSpace ["subSub", "sub", "root"]) -> '["subSub", "sub", "root"]'
 -- @
-newtype NameSpace = NameSpace { getNameSpace :: [Text] } deriving (Show, Eq, Ord)
+newtype NameSpace = NameSpace { getNameSpace :: [Text] } deriving (Show, Eq, Ord, Typeable)
 
 -- | push a 'Text' name to the front of 'NameSpace'.
 pushNameSpace :: Text -> NameSpace -> NameSpace

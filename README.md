@@ -10,7 +10,9 @@ This package provide a mtl style `MonadLog` class and a concrete monad transform
 
 + Parametrized logging environment for extensibility.
 
-+ Basic logging environment type(`Label`,`Loc`,`NameSpace`,`ThreadId`) are included, and you can easily make your own.
++ Basic logging environment type(`Label`,`LogLoc`,`NameSpace`,`LogThreadId`) are included, and you can easily make your own.
+
++ Type level heterogeneous environment are support using hset package.
 
 + JSON logging built-in.
 
@@ -78,7 +80,7 @@ import Control.Monad.Log.LogThreadId
 -- [INFO] [25-Apr-2016 15:06:10] [ThreadId 677] This is simple log 2
 -- [INFO] [25-Apr-2016 15:06:10] [ThreadId 678] This is simple log 2
 -- [INFO] [25-Apr-2016 15:06:10] [ThreadId 679] This is simple log 2
-...
+-- ...
 
 main :: IO ()
 main = do
@@ -89,12 +91,13 @@ main = do
         levelDebug
         tid
 
+    replicateM_ 100 $
+        forkIO . runLogT' logger . withMyLogThreadId $ do  -- use runLogT' here.
+            info "This is simple log 2"
+
     runLogTSafe logger $ do
         info "This is simple log 1"
-
-    replicateM_ 100 $
-        forkIO . runLogT' logger . withMyLogThreadId $ do
-            info "This is simple log 2"
+        liftIO $ forever $ threadDelay maxBound  -- Don't exit main thread, or logger will be cleaned.
 ```
 
 + Customized logging environment:
