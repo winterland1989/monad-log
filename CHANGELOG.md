@@ -1,3 +1,8 @@
+0.2.0.0
+-------
+
+Rewrite from scratch with data-has.
+
 0.1.2.0
 -------
 

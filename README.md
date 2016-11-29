@@ -4,27 +4,6 @@ A fast & simple logging monad
 [![Hackage](https://img.shields.io/hackage/v/monad-log.svg?style=flat-square)](http://hackage.haskell.org/package/monad-log)
 [![Travis-CI](https://travis-ci.org/winterland1989/monad-log.svg?style=flat-square)](https://travis-ci.org/winterland1989/monad-log)
 
-This package provide a mtl style `MonadLog` class and a concrete monad transformer `LogT`, the main difference between this package and monad-logger are:
-
-+ Base monad has to be an instance of `MonadIO`.
-
-+ Parametrized logging environment for extensibility.
-
-+ Basic logging environment type(`Label`,`LogLoc`,`NameSpace`,`LogThreadId`) are included, and you can easily make your own.
-
-+ Type level heterogeneous environment are support using hset package.
-
-+ JSON logging built-in.
-
-+ default to fast-logger backend, with good stdout and file support.
-
-If you are an application author, you can use `LogT` transformer, a specialized reader monad to inject `Logger env`.
-
-If you are a library author, you should:
-
-+ make your monad stack an instance of 'MonadLog', usually you can do this by embedding `Logger env` into your monad's reader part.
-
-+ provide a default formatter, and API to run with customized formatter.
 
 Example
 -------
