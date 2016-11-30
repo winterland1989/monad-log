@@ -2,21 +2,18 @@ module Main where
 
 -------------------------------------------------------------------------------
 
-import     Criterion.Main
-import     Data.Time.Clock.POSIX
+import           Criterion.Main
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (pack)
 import     Data.Time
-
+import qualified Data.Thyme as Y
+import qualified System.Locale as Y
 main :: IO ()
 main = do
-    getCurrentTime >>= print
-    getPOSIXTime >>= print . posixSecondsToUTCTime
-    getZonedTime >>= print
     defaultMain
-        [ bgroup "time"
-            [ bench "getCurrentTime" $ nfIO getCurrentTime
-            , bench "getPOSIXTime" $ nfIO getPOSIXTime
-            , bench "getZonedTime" $ nfIO getZonedTime
+        [ bgroup "time vs unixtime"
+            [ bench "time" $ nfIO Y.getCurrentTime
+            , bench "thyme" $ nfIO Y.getZonedTime
             ]
         ]
-
 

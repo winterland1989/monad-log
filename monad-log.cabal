@@ -67,3 +67,6 @@ benchmark bench
                     ,   bytestring
                     ,   criterion >= 1.0.2.0
                     ,   time
+                    ,   thyme
+                    ,   old-locale
+                    ,   clock
